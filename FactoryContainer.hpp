@@ -99,7 +99,7 @@ public:
 
 private:
   typedef std::type_index registry_key;
-  typedef std::vector<std::type_index> ancestor_list_type;
+  typedef std::vector<registry_key> ancestor_list_type;
   typedef std::function<std::shared_ptr<void>(ancestor_list_type*)> factory_value;
   std::map<registry_key, factory_value> m_factoryList;
 
@@ -119,27 +119,25 @@ private:
   {
     const auto key = std::type_index(typeid(I));
     const auto it = m_factoryList.find(key);
-    if (it != m_factoryList.end())
+    if (it == m_factoryList.end())
     {
-      // If this type is already in the ancestor list, we need to return nullptr
-      if (std::find(ancestor_list->begin(), ancestor_list->end(), std::type_index(typeid(I)))
-          != ancestor_list->end())
-      {
-        return nullptr;
-      }
-
-      // Before calling factory of this class, we push ourselves onto the ancestor_list
-      ancestor_list->push_back(std::type_index(typeid(I)));
-
-      const auto pObj = it->second(ancestor_list);
-
-      // After having been constructed, we pop ourselves off the ancestor_list
-      ancestor_list->pop_back();
-
-      return std::static_pointer_cast<I>(pObj);
+      return nullptr;
     }
 
-    return nullptr;
+    // If this type is already in the ancestor list, return nullptr
+    // to prevent circular dependency loop
+    if (std::find(ancestor_list->begin(), ancestor_list->end(), key) != ancestor_list->end())
+    {
+      return nullptr;
+    }
+
+    // Depth first traversal, push key onto the list
+    // so we can detect circular dependencies
+    ancestor_list->push_back(key);
+    const auto pObj = it->second(ancestor_list);
+    ancestor_list->pop_back();
+
+    return std::static_pointer_cast<I>(pObj);
   }
 
   // Disable Copy and Assign.
