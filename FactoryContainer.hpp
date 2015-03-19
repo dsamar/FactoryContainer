@@ -26,145 +26,123 @@ For more information, please refer to <http://unlicense.org/>
 */
 
 #pragma once
-
 #include <map>
 #include <memory>
 #include <functional>
 #include <typeindex>
 #include <vector>
 
-namespace NUtility
+class FactoryContainer
 {
-	class FactoryContainer
-	{
-	private:
-		typedef std::wstring str;
-		const wchar_t* kNoName = L"NO_NAME";
+public:
+  FactoryContainer() : m_factoryList()
+  {
+  }
 
-	public:
-		typedef std::type_index visited_pair;
-		typedef std::function<std::shared_ptr<void>(std::vector<visited_pair>*)> TFactory;
+  // Register Type I with Concrete Implementation T and dependencies
+  // expanded from rest of template arguments.
+  // Calls to Resolve will instantiate type T and recursively resolve
+  // dependencies passing them into T's constructor as shared_ptrs
+  // Internally calls Unregister on previous registrations for type I
+  // There is no checking on the relation between type I and T, so care
+  // must be taken to ensure that T can derive or is equal to I
+  template <typename I, typename T, typename... Arguments>
+  void RegisterType()
+  {
+    auto tFactory = [this](ancestor_list_type * ancestor_list)
+    {
+      // sometimes we don't need the ancestor list as the argument package is empty.
+      // this avoids unused parameter warning
+      (void) ancestor_list;
+      return std::make_shared<T>(this->Resolve<Arguments>(ancestor_list)...);
+    };
+    RegisterFactory<I>(std::move(tFactory));
+  }
 
-		FactoryContainer() : m_factoryList()
-		{
-		}
+  // Register Type I with an instance defined by pInstance.
+  // Calls to resolve will return the pointer to pInstance.
+  // Internally calls Unregister on previous registrations for type I
+  template <typename I>
+  void RegisterInstance(std::shared_ptr<I> pInstance)
+  {
+    auto tFactory = [pInstance] (ancestor_list_type*)
+    {
+      return pInstance;
+    };
+    RegisterFactory<I>(std::move(tFactory));
+  }
 
-		template <typename I>
-		void RegisterFactory(const str& strNamedRegistration, TFactory&& tFactory)
-		{
-			// Always unregister so we don't end up with duplicate entries.
-			Unregister<I>(strNamedRegistration);
+  // Remove the associated type from the factory lookup
+  // Calls to Resolve<I> will return nullptr after this call
+  template <typename I>
+  void Unregister()
+  {
+    const auto key = std::type_index(typeid(I));
+    const auto it = m_factoryList.find(key);
+    if (it != m_factoryList.end())
+    {
+      m_factoryList.erase(it);
+    }
+  }
 
-			// Push the factory onto our list.
-			const auto tIndex = std::make_pair(std::type_index(typeid(I)), strNamedRegistration);
-			m_factoryList[tIndex] = std::move(tFactory);
-		}
+  // Resolve the registered type I
+  // Returns a shared_ptr to object based on type or instance registrations
+  // Care must be taken as there is no checking done on registered types, meaning
+  // we do a blind cast from whatever type was registered to type I
+  template <typename I>
+  std::shared_ptr<I> Resolve() const
+  {
+    // ancestor list for dependency loop detection
+    ancestor_list_type ancestor_list;
+    return Resolve<I>(&ancestor_list);
+  }
 
-		template <typename I, typename T, typename... Arguments>
-		void RegisterType(const str& strNamedRegistration)
-		{
-			auto tFactory = [this, strNamedRegistration](std::vector<visited_pair>* ancestor_list) {
-				(void)ancestor_list; // sometimes we don't need the ancestor list as the arg package is empty.
-				return std::make_shared<T>(this->Resolve<Arguments>(strNamedRegistration, ancestor_list)...);
-			};
-			RegisterFactory<I>(strNamedRegistration, std::move(tFactory));
-		}
+private:
+  typedef std::type_index registry_key;
+  typedef std::vector<std::type_index> ancestor_list_type;
+  typedef std::function<std::shared_ptr<void>(ancestor_list_type*)> factory_value;
+  std::map<registry_key, factory_value> m_factoryList;
 
-		template <typename I>
-		void RegisterInstance(const str& strNamedRegistration, std::shared_ptr<I> pInstance)
-		{
-			auto tFactory = [pInstance] (std::vector<visited_pair>*) {
-				return pInstance; 
-			};
-			RegisterFactory<I>(strNamedRegistration, std::move(tFactory));
-		}
+  template <typename I>
+  void RegisterFactory(factory_value&& tFactory)
+  {
+    // Always unregister so we don't end up with duplicate entries.
+    Unregister<I>();
 
-		template <typename I>
-		void RegisterFactory(TFactory&& tFactory)
-		{
-			RegisterFactory<I>(kNoName);
-		}
+    // Push the factory onto our list.
+    const auto key = std::type_index(typeid(I));
+    m_factoryList[key] = std::move(tFactory);
+  }
 
-		template <typename I, typename T, typename... Arguments>
-		void RegisterType()
-		{
-			RegisterType<I, T, Arguments...>(kNoName);
-		}
+  template <typename I>
+  std::shared_ptr<I> Resolve(ancestor_list_type* ancestor_list) const
+  {
+    const auto key = std::type_index(typeid(I));
+    const auto it = m_factoryList.find(key);
+    if (it != m_factoryList.end())
+    {
+      // If this type is already in the ancestor list, we need to return nullptr
+      if (std::find(ancestor_list->begin(), ancestor_list->end(), std::type_index(typeid(I)))
+          != ancestor_list->end())
+      {
+        return nullptr;
+      }
 
-		template <typename I>
-		void RegisterInstance(std::shared_ptr<I> pInstance)
-		{
-			RegisterInstance<I>(kNoName, pInstance);
-		}
+      // Before calling factory of this class, we push ourselves onto the ancestor_list
+      ancestor_list->push_back(std::type_index(typeid(I)));
 
-		template <typename I>
-		void Unregister(const str& strNamedRegistration)
-		{
-			const auto tPair = std::make_pair(std::type_index(typeid(I)), strNamedRegistration);
-			const auto it = m_factoryList.find(tPair);
-			if (it != m_factoryList.end())
-			{
-				m_factoryList.erase(it);
-			}
-		}
+      const auto pObj = it->second(ancestor_list);
 
-		template <typename I>
-		void Unregister()
-		{
-			Unregister<I>(kNoName);
-		}
+      // After having been constructed, we pop ourselves off the ancestor_list
+      ancestor_list->pop_back();
 
-		template <typename I>
-		std::shared_ptr<I> Resolve(const str& strNamedRegistration, std::vector<visited_pair>* ancestor_list = nullptr) const
-		{
-			// If we are called with null list, that means we are the
-			// head of the tree. allocate the list of visited pairs
-			// and claim ownership
-			std::unique_ptr<std::vector<visited_pair>> list_holder;
-			if (nullptr == ancestor_list)
-			{
-				list_holder.reset(new std::vector<visited_pair>());
-				ancestor_list = list_holder.get();
-			}
+      return std::static_pointer_cast<I>(pObj);
+    }
 
-			const auto tPair = std::make_pair(std::type_index(typeid(I)), strNamedRegistration);
-			const auto it = m_factoryList.find(tPair);
-			if (it != m_factoryList.end())
-			{
-				// If this type is already in the ancestor list, we ned to return nullptr
-				if (std::find(ancestor_list->begin(), ancestor_list->end(), std::type_index(typeid(I)))
-					!= ancestor_list->end())
-				{
-					return nullptr;
-				}
+    return nullptr;
+  }
 
-				// Before calling factory of this class, we push ourselves onto the ancestor_list
-				ancestor_list->push_back(std::type_index(typeid(I)));
-
-				const auto pObj = it->second(ancestor_list);
-
-				// After having been constructed, we pop ourselves off the ancestor_list
-				ancestor_list->erase(std::remove(ancestor_list->begin(), 
-					ancestor_list->end(), std::type_index(typeid(I))), ancestor_list->end());
-
-				return std::static_pointer_cast<I>(pObj);
-			}
-
-			return nullptr;
-		}
-
-		template <typename I>
-		std::shared_ptr<I> Resolve(std::vector<visited_pair>* ancestor_list = nullptr) const
-		{
-			return Resolve<I>(kNoName, ancestor_list);
-		}
-
-	private:
-		typedef std::pair<std::type_index, str> TIndex;
-		std::map<TIndex, TFactory> m_factoryList;
-
-		// Disable Copy and Assign.
-		FactoryContainer(FactoryContainer&) = delete;
-		void operator=(FactoryContainer) = delete;
-	};
-}
+  // Disable Copy and Assign.
+  FactoryContainer(FactoryContainer&) = delete;
+  void operator=(FactoryContainer) = delete;
+};
