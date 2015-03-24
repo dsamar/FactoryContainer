@@ -26,14 +26,20 @@ For more information, please refer to <http://unlicense.org/>
 */
 
 #pragma once
-#include <map>
+#include <unordered_map>
 #include <memory>
 #include <functional>
 #include <typeindex>
+#include <type_traits>
 #include <vector>
+#include <algorithm>
 
 class FactoryContainer
 {
+private:
+  typedef std::vector<std::type_index> ancestor_list_type;
+  typedef std::function<std::shared_ptr<void>(ancestor_list_type*)> factory_value;
+
 public:
   FactoryContainer() : m_factoryList()
   {
@@ -44,15 +50,20 @@ public:
   // Calls to Resolve will instantiate type T and recursively resolve
   // dependencies passing them into T's constructor as shared_ptrs
   // Internally calls Unregister on previous registrations for type I
-  // There is no checking on the relation between type I and T, so care
-  // must be taken to ensure that T can derive or is equal to I
   template <typename I, typename T, typename... Arguments>
   void RegisterType()
   {
+    // Check type traits between I and T
+    // I must be the base of T
+    if(!std::is_base_of<I,T>())
+    {
+      return;
+    }
+
     auto tFactory = [this](ancestor_list_type * ancestor_list)
     {
-      // sometimes we don't need the ancestor list as the argument package is empty.
-      // this avoids unused parameter warning
+      // sometimes we don't need the ancestor list as the argument package
+      // is empty. this avoids unused parameter warning
       (void) ancestor_list;
       return std::make_shared<T>(this->Resolve<Arguments>(ancestor_list)...);
     };
@@ -87,8 +98,6 @@ public:
 
   // Resolve the registered type I
   // Returns a shared_ptr to object based on type or instance registrations
-  // Care must be taken as there is no checking done on registered types, meaning
-  // we do a blind cast from whatever type was registered to type I
   template <typename I>
   std::shared_ptr<I> Resolve() const
   {
@@ -98,10 +107,7 @@ public:
   }
 
 private:
-  typedef std::type_index registry_key;
-  typedef std::vector<registry_key> ancestor_list_type;
-  typedef std::function<std::shared_ptr<void>(ancestor_list_type*)> factory_value;
-  std::map<registry_key, factory_value> m_factoryList;
+  std::unordered_map<std::type_index, factory_value> m_factoryList;
 
   template <typename I>
   void RegisterFactory(factory_value&& tFactory)
@@ -126,7 +132,8 @@ private:
 
     // If this type is already in the ancestor list, return nullptr
     // to prevent circular dependency loop
-    if (std::find(ancestor_list->begin(), ancestor_list->end(), key) != ancestor_list->end())
+    auto found = std::find(ancestor_list->begin(), ancestor_list->end(), key);
+    if ( found != ancestor_list->end())
     {
       return nullptr;
     }

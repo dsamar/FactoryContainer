@@ -25,7 +25,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 For more information, please refer to <http://unlicense.org/>
 */
 
-#include "stdafx.h"
+#include <gtest/gtest.h>
 #include "FactoryContainer.hpp"
 #include "SampleTestClassHierarchy.h"
 
@@ -160,5 +160,14 @@ TEST(FactoryContainerTest, CircularDependencyTestMoreComplex)
   ASSERT_NE(nullptr, pA->GetC()->GetB());
   ASSERT_EQ(nullptr, pA->GetB()->GetC()->GetB());
   ASSERT_EQ(nullptr, pA->GetC()->GetB()->GetC());
+}
+
+TEST(FactoryContainerTest, UnrelatedBaseAndDerived)
+{
+  FactoryContainer tFactory;
+  tFactory.RegisterType<UnrelatedBase, UnrelatedDerived>();
+
+  auto pThing = tFactory.Resolve<UnrelatedBase>();
+  ASSERT_EQ(nullptr, pThing);
 }
 }

@@ -190,4 +190,17 @@ public:
 private:
   std::shared_ptr<B> m_pB;
 };
+
+// Some test cases for unrelated classes.
+class UnrelatedBase
+{
+public:
+  UnrelatedBase() {}
+};
+
+class UnrelatedDerived
+{
+public:
+  UnrelatedDerived() {}
+};
 }
