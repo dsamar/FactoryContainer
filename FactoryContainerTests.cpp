@@ -161,13 +161,21 @@ TEST(FactoryContainerTest, CircularDependencyTestMoreComplex)
   ASSERT_EQ(nullptr, pA->GetB()->GetC()->GetB());
   ASSERT_EQ(nullptr, pA->GetC()->GetB()->GetC());
 }
-
-TEST(FactoryContainerTest, UnrelatedBaseAndDerived)
+TEST(FactoryContainerTest, CircularDependencyTestEvenMoreComplex)
 {
-  FactoryContainer tFactory;
-  tFactory.RegisterType<UnrelatedBase, UnrelatedDerived>();
+  // Class1 -> Class2 -> Class3 -> Class1
+  //                  -> Class1
 
-  auto pThing = tFactory.Resolve<UnrelatedBase>();
-  ASSERT_EQ(nullptr, pThing);
+  FactoryContainer tFactory;
+  tFactory.RegisterType<Class1, Class1, Class2>();
+  tFactory.RegisterType<Class2, Class2, Class1, Class3>();
+  tFactory.RegisterType<Class3, Class3, Class1>();
+
+  auto pC1 = tFactory.Resolve<Class1>();
+  ASSERT_NE(nullptr, pC1);
+  ASSERT_NE(nullptr, pC1->Get2());
+  ASSERT_NE(nullptr, pC1->Get2()->Get3());
+  ASSERT_EQ(nullptr, pC1->Get2()->Get1());
+  ASSERT_EQ(nullptr, pC1->Get2()->Get3()->Get1());
 }
 }

@@ -191,16 +191,38 @@ private:
   std::shared_ptr<B> m_pB;
 };
 
-// Some test cases for unrelated classes.
-class UnrelatedBase
+// Class1 -> Class2 -> Class3 -> Class1
+//                  -> Class1
+
+class Class2;
+class Class1
 {
 public:
-  UnrelatedBase() {}
+  Class1(std::shared_ptr<Class2> p2) : m_p2(p2) {}
+  Class2* Get2() { return m_p2.get(); }
+private:
+  std::shared_ptr<Class2> m_p2;
 };
 
-class UnrelatedDerived
+class Class3;
+class Class2
 {
 public:
-  UnrelatedDerived() {}
+  Class2(std::shared_ptr<Class1> p1,
+         std::shared_ptr<Class3> p3) : m_p1(p1), m_p3(p3) {}
+  Class1* Get1() { return m_p1.get(); }
+  Class3* Get3() { return m_p3.get(); }
+private:
+  std::shared_ptr<Class1> m_p1;
+  std::shared_ptr<Class3> m_p3;
+};
+
+class Class3
+{
+public:
+  Class3(std::shared_ptr<Class1> p1) : m_p1(p1) {}
+  Class1* Get1() { return m_p1.get(); }
+private:
+  std::shared_ptr<Class1> m_p1;
 };
 }

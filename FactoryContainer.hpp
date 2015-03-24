@@ -37,8 +37,8 @@ For more information, please refer to <http://unlicense.org/>
 class FactoryContainer
 {
 private:
-  typedef std::vector<std::type_index> ancestor_list_type;
-  typedef std::function<std::shared_ptr<void>(ancestor_list_type*)> factory_value;
+  typedef std::vector<std::type_index> type_list;
+  typedef std::function<std::shared_ptr<void>(type_list*)> factory_value;
 
 public:
   FactoryContainer() : m_factoryList()
@@ -53,14 +53,10 @@ public:
   template <typename I, typename T, typename... Arguments>
   void RegisterType()
   {
-    // Check type traits between I and T
-    // I must be the base of T
-    if(!std::is_base_of<I,T>())
-    {
-      return;
-    }
+    static_assert(std::is_base_of<I,T>::value,
+      "RegisterType<I,T> called with unrelated types.");
 
-    auto tFactory = [this](ancestor_list_type * ancestor_list)
+    auto tFactory = [this](type_list * ancestor_list)
     {
       // sometimes we don't need the ancestor list as the argument package
       // is empty. this avoids unused parameter warning
@@ -76,7 +72,7 @@ public:
   template <typename I>
   void RegisterInstance(std::shared_ptr<I> pInstance)
   {
-    auto tFactory = [pInstance] (ancestor_list_type*)
+    auto tFactory = [pInstance] (type_list*)
     {
       return pInstance;
     };
@@ -102,7 +98,7 @@ public:
   std::shared_ptr<I> Resolve() const
   {
     // ancestor list for dependency loop detection
-    ancestor_list_type ancestor_list;
+    type_list ancestor_list;
     return Resolve<I>(&ancestor_list);
   }
 
@@ -121,7 +117,7 @@ private:
   }
 
   template <typename I>
-  std::shared_ptr<I> Resolve(ancestor_list_type* ancestor_list) const
+  std::shared_ptr<I> Resolve(type_list* ancestor_list) const
   {
     const auto key = std::type_index(typeid(I));
     const auto it = m_factoryList.find(key);
