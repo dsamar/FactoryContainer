@@ -84,8 +84,8 @@ public:
   template <typename I>
   void Unregister()
   {
-    const auto key = std::type_index(typeid(I));
-    const auto it = m_factoryList.find(key);
+    auto key = std::type_index(typeid(I));
+    auto it = m_factoryList.find(key);
     if (it != m_factoryList.end())
     {
       m_factoryList.erase(it);
@@ -112,15 +112,15 @@ private:
     Unregister<I>();
 
     // Push the factory onto our list.
-    const auto key = std::type_index(typeid(I));
+    auto key = std::type_index(typeid(I));
     m_factoryList[key] = std::move(tFactory);
   }
 
   template <typename I>
   std::shared_ptr<I> Resolve(type_list* ancestor_list) const
   {
-    const auto key = std::type_index(typeid(I));
-    const auto it = m_factoryList.find(key);
+    auto key = std::type_index(typeid(I));
+    auto it = m_factoryList.find(key);
     if (it == m_factoryList.end())
     {
       return nullptr;
@@ -137,7 +137,7 @@ private:
     // Depth first traversal, push key onto the list
     // so we can detect circular dependencies
     ancestor_list->push_back(key);
-    const auto pObj = it->second(ancestor_list);
+    auto pObj = it->second(ancestor_list);
     ancestor_list->pop_back();
 
     return std::static_pointer_cast<I>(pObj);
